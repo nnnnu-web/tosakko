@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>気分で選ぶ！高知市お出かけマップ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: "Hiragino Kaku Gothic ProN", sans-serif;
+      background-color: #f6f9fc;
+      text-align: center;
+    }
+
+    header {
+      background-color: #2c6fb7;
+      color: white;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: auto;
+      padding: 20px;
+    }
+
+    .section-title {
+      margin-top: 25px;
+      margin-bottom: 10px;
+      font-weight: bold;
+    }
+
+    .buttons {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    button {
+      padding: 10px 14px;
+      font-size: 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      color: white;
+    }
+
+    .quiet { background-color: #4a90e2; }
+    .lively { background-color: #f5a623; }
+    .nature { background-color: #7cb342; }
+    .distance { background-color: #666; }
+
+    #map {
+      margin-top: 20px;
+      width: 100%;
+      height: 420px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>気分で選ぶ！高知市お出かけマップ</h1>
+</header>
+
+<div class="container">
+
+  <p>
+    気分と移動距離を選ぶと、<br>
+    条件に合った高知市内のおすすめスポットが地図に表示されます。
+  </p>
+
+  <div class="section-title">① 気分を選ぶ</div>
+  <div class="buttons">
+    <button class="quiet" onclick="selectMood('quiet')">静かな場所で過ごしたい</button>
+    <button class="lively" onclick="selectMood('lively')">にぎやかな場所に行きたい</button>
+    <button class="nature" onclick="selectMood('nature')">自然に触れたい</button>
+  </div>
+
+  <div class="section-title">② 距離を選ぶ</div>
+  <div class="buttons">
+    <button class="distance" onclick="selectDistance('walk')">徒歩15分圏内</button>
+    <button class="distance" onclick="selectDistance('all')">制限なし</button>
+  </div>
+
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+  // 地図初期化（高知市中心）
+  const map = L.map("map").setView([33.5597, 133.5311], 13);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "© OpenStreetMap contributors"
+  }).addTo(map);
+
+  let markers = [];
+  let circle = null;
+  let currentMood = null;
+  let currentDistance = null;
+
+  const moodColors = {
+    quiet: "#4a90e2",
+    lively: "#f5a623",
+    nature: "#7cb342"
+  };
+
+  // スポットデータ（最終版）
+  const spotData = {
+    quiet: [
+      { name: "高知城", lat: 33.5588, lng: 133.5311, reason: "落ち着いた雰囲気の中で歴史を感じられる" },
+      { name: "高知城歴史博物館", lat: 33.5595, lng: 133.5334, reason: "静かな空間で高知の歴史を学べる" },
+      { name: "竹林寺", lat: 33.5758, lng: 133.5427, reason: "境内が静かで心を落ち着けられる" },
+      { name: "永国寺図書館", lat: 33.5564, lng: 133.5257, reason: "集中して読書や勉強ができる" },
+      { name: "オーテピア高知図書館", lat: 33.5608, lng: 133.5348, reason: "街中にありながら静かに過ごせる" }
+    ],
+
+    lively: [
+      { name: "ひろめ市場", lat: 33.5602, lng: 133.5325, reason: "多くの人でにぎわい活気がある" },
+      { name: "帯屋町商店街", lat: 33.5584, lng: 133.5354, reason: "買い物や食べ歩きを楽しめる" },
+      { name: "はりまや橋", lat: 33.5590, lng: 133.5376, reason: "観光客が多く写真撮影でにぎやか" },
+      { name: "高知駅", lat: 33.5641, lng: 133.5439, reason: "人の行き来が多く街の玄関口" }
+    ],
+
+    nature: [
+      { name: "桂浜", lat: 33.4966, lng: 133.5453, reason: "海と自然の景色を満喫できる" },
+      { name: "牧野植物園", lat: 33.5675, lng: 133.5368, reason: "多様な植物と自然をゆっくり感じられる" },
+      { name: "鏡川", lat: 33.5582, lng: 133.5206, reason: "川沿いを散歩しながら自然を感じられる" }
+    ]
+  };
+
+  function selectMood(mood) {
+    currentMood = mood;
+    updateMap();
+  }
+
+  function selectDistance(distance) {
+    currentDistance = distance;
+    updateMap();
+  }
+
+  function updateMap() {
+    if (!currentMood || !currentDistance) return;
+
+    // マーカー削除
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+    if (circle) map.removeLayer(circle);
+
+    // マーカー追加
+    spotData[currentMood].forEach(spot => {
+      const marker = L.marker([spot.lat, spot.lng])
+        .addTo(map)
+        .bindPopup(`<strong>${spot.name}</strong><br>${spot.reason}`);
+      markers.push(marker);
+    });
+
+    // 徒歩15分圏内（約1.2km）
+    if (currentDistance === "walk") {
+      circle = L.circle([33.5597, 133.5311], {
+        radius: 1200,
+        color: moodColors[currentMood],
+        fillColor: moodColors[currentMood],
+        fillOpacity: 0.2
+      }).addTo(map);
+    }
+  }
+</script>
+
+</body>
+</html>
